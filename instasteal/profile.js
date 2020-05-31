@@ -1,13 +1,12 @@
-const {fetchMediaFromInstagramPosts} = require('./lib/insta'); 
-var request = require('request-promise-native');
-const {JSDOM} = require("jsdom");
-var fs = require('fs');
-var url = require('url');
-const {default: PQueue} = require('p-queue');
-var https = require('https');
+const {pageLimit, queryHash} = require('config');
+const {
+    fetchMediaFromInstagramPosts, 
+    fetchDocumentObjectModel, 
+    findWindowSharedDataJSScriptElement,
+    getSharedDataString
+} = require('./lib/insta'); 
+const request = require('request-promise-native');
 
-const WINDOW_SHAREDDATA = "window._sharedData =";
-const JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS = "window._sharedData = {";
 
 /*
 https://stackoverflow.com/questions/54238696/what-is-query-hash-in-instagram
@@ -24,14 +23,8 @@ fetchDocumentObjectModel(instagramProfile)
         console.error(error);    
     });
 
-async function fetchDocumentObjectModel(url) {
-    const htmlString = await request(url);
-    const dom = new JSDOM(htmlString);
-    return (require('jquery'))(dom.window);
-}
-
 async function parseHTMLProfilePage($) {
-    let htmlScriptElementList = findSpecificJSScriptElement($, JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS);
+    let htmlScriptElementList = findWindowSharedDataJSScriptElement($);
 
     if (htmlScriptElementList.length != 1) {
         throw new Error("Unable to find the scripts block with the sharedData");
@@ -62,18 +55,6 @@ async function parseHTMLProfilePage($) {
     //--put the shortcodes into a queue for processing
     const shortcodes = edges.map(getNodeShortCodes);
     return {shortcodes, id, page_info};
-}
-
-function findSpecificJSScriptElement($, searchString) {
-    let jsScriptElementsList = $.find("script[type='text/javascript']");
-    jsScriptElementsList = jsScriptElementsList.filter(script => {
-        return ($(script).text().includes(searchString));
-    });
-    return jsScriptElementsList;
-}
-
-function getSharedDataString($, htmlScriptElement) {
-    return $(htmlScriptElement).text().slice(WINDOW_SHAREDDATA.length, $(htmlScriptElement).text().length - 1);
 }
 
 function getNodeShortCodes(node) {
@@ -111,14 +92,13 @@ function queueShortcodesForMediaRetrieval(shortcodes) {
 
 }
 
-
 class InstagramProfilePage {
     constructor(id, page_info) {
         this.profileId = id;
         this.mapPageInfo(page_info);
 
         //--https://github.com/mineur/instagram-parser/blob/master/docs/setup.md#how-to-get-your-query-hash-old-query-id
-        this.query_hash = '44efc15d3c13342d02df0b5a9fa3d33f';
+        this.query_hash = queryHash;
     }
 
     mapPageInfo(page_info) {
@@ -133,7 +113,7 @@ class InstagramProfilePage {
 
     async fetchNextPage() {
         //--Seems like 50 is the max; gave it 100, but graphql only returned 50
-        const varString = JSON.stringify({'id':this.profileId,"first":12,"after":this.end_cursor});
+        const varString = JSON.stringify({'id':this.profileId,"first":pageLimit,"after":this.end_cursor});
         const variables = encodeURIComponent(varString);
         const PAGING_URL=`https://www.instagram.com/graphql/query/?query_hash=${this.query_hash}&variables=${variables}`;
         try {

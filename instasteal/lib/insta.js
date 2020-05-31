@@ -4,6 +4,7 @@ var fs = require('fs');
 var url = require('url');
 const {default: PQueue} = require('p-queue');
 var https = require('https');
+const {partial} = require('./func_utils');
 
 const fetchImageQueue = new PQueue({concurrency: 5});
 const downloadImageQueue = new PQueue({concurrency: 5});
@@ -25,7 +26,7 @@ async function fetchMediaFromInstagramPost(url) {
     console.log(`Fetching media content from Instagram post, ${url}`);
     const $ = await fetchDocumentObjectModel(url);
 
-    let htmlScriptElementList = findSpecificJSScriptElement($, JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS);
+    let htmlScriptElementList = findSpecificJSScriptElement(JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS, $);
 
     if (htmlScriptElementList.length != 1) {
         throw new Error("Unable to find the scripts block with the sharedData");
@@ -45,7 +46,7 @@ async function fetchDocumentObjectModel(url) {
     return (require('jquery'))(dom.window);
 }
 
-function findSpecificJSScriptElement($, searchString) {
+function findSpecificJSScriptElement(searchString, $) {
     let jsScriptElementsList = $.find("script[type='text/javascript']");
     jsScriptElementsList = jsScriptElementsList.filter(script => {
         return ($(script).text().includes(searchString));
@@ -106,3 +107,6 @@ function downloadFile(file_url) {
 };
 
 exports.fetchMediaFromInstagramPosts = fetchMediaFromInstagramPosts;
+exports.fetchDocumentObjectModel = fetchDocumentObjectModel;
+exports.findWindowSharedDataJSScriptElement = partial(findSpecificJSScriptElement, JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS);
+exports.getSharedDataString = getSharedDataString;
