@@ -6,6 +6,7 @@ const {
     getSharedDataString
 } = require('./lib/insta'); 
 const request = require('request-promise-native');
+const url = require('url');
 
 
 /*
@@ -15,6 +16,8 @@ https://www.instagram.com/graphql/query/?query_hash=44efc15d3c13342d02df0b5a9fa3
 
 const instagramProfile = process.argv[2]
 console.log(instagramProfile);
+const profileUrl = url.parse(instagramProfile);
+const profilePath = profileUrl.pathname;
 
 fetchDocumentObjectModel(instagramProfile)
     .then(parseHTMLProfilePage)
@@ -84,7 +87,7 @@ async function iteratePaging(paging) {
 function queueShortcodesForMediaRetrieval(shortcodes) {
     
     const postURLs = shortcodes.map(convertShortcodeIntoInstagramPostURL);
-    fetchMediaFromInstagramPosts(postURLs);
+    fetchMediaFromInstagramPosts(postURLs, profilePath);
     
     function convertShortcodeIntoInstagramPostURL(shortcode) {
         return `https://www.instagram.com/p/${shortcode}`;

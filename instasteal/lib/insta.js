@@ -5,24 +5,35 @@ var url = require('url');
 const {default: PQueue} = require('p-queue');
 var https = require('https');
 const {partial} = require('./func_utils');
+const util = require('util');
+
+const mkdir = util.promisify(fs.mkdir);
 
 const fetchImageQueue = new PQueue({concurrency: 5});
 const downloadImageQueue = new PQueue({concurrency: 5});
 /******************************************************88
  * TODO:
  * 1) do we need to support HTTP AND HTTPS or just HTTPS
- * 3) Refactoring
  *********************************************************/
 
-const DOWNLOAD_DIR = '/home/cgianelle/Downloads/';
+const DOWNLOAD_DIR = '/home/cgianelle/Downloads';
 const WINDOW_SHAREDDATA = "window._sharedData =";
 const JS_WHERE_INSTAGRAM_KEEPS_IMAGE_URLS = "window._sharedData = {";
 
-function fetchMediaFromInstagramPosts(arrayOfInstagramPostURLs) {
-    arrayOfInstagramPostURLs.forEach(url => fetchImageQueue.add(() => fetchMediaFromInstagramPost(url)));
+function fetchMediaFromInstagramPosts(arrayOfInstagramPostURLs, destination=DOWNLOAD_DIR) {
+    destination = destination === DOWNLOAD_DIR ? destination + '/' : DOWNLOAD_DIR + destination;
+    mkdir(destination).then(() => {
+        arrayOfInstagramPostURLs.forEach(url => fetchImageQueue.add(() => fetchMediaFromInstagramPost(url, destination)));
+    }).catch((error) => {
+        if (error.code === 'EEXIST') {
+            arrayOfInstagramPostURLs.forEach(url => fetchImageQueue.add(() => fetchMediaFromInstagramPost(url, destination)));
+        } else {
+            console.error(error);
+        }
+    });
 }
 
-async function fetchMediaFromInstagramPost(url) {
+async function fetchMediaFromInstagramPost(url, destination) {
     console.log(`Fetching media content from Instagram post, ${url}`);
     const $ = await fetchDocumentObjectModel(url);
 
@@ -37,7 +48,7 @@ async function fetchMediaFromInstagramPost(url) {
     const sharedDataString = getSharedDataString($, htmlScriptElement);
     
     let urls = extractMediaURLs(sharedDataString);
-    urls.forEach(url => downloadImageQueue.add(() => downloadFile(url)));
+    urls.forEach(url => downloadImageQueue.add(() => downloadFile(url, destination)));
 }
 
 async function fetchDocumentObjectModel(url) {
@@ -89,11 +100,11 @@ function fetchMultiMediaURLs(edges, urls) {
 }
 
 // Function for downloading file using HTTP.get
-function downloadFile(file_url) {
+function downloadFile(file_url, file_location) {
     const requestUrl = url.parse(file_url, true);
 
     var fileName = requestUrl.pathname.split('/').pop();
-    var fileStream = fs.createWriteStream(DOWNLOAD_DIR + fileName);
+    var fileStream = fs.createWriteStream(file_location + fileName);
 
     // console.log(requestUrl, file_name)
     https.get(requestUrl, function(res) {
@@ -101,7 +112,7 @@ function downloadFile(file_url) {
             fileStream.write(data);
         }).on('end', function() {
             fileStream.end();
-            console.log(fileName + ' downloaded to ' + DOWNLOAD_DIR);
+            console.log(fileName + ' downloaded to ' + file_location);
         });
     });
 };
